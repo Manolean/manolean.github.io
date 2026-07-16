@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>natalilla</title>
+<style>
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: #1a1030;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  canvas {
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    width: min(90vw, 640px);
+    height: min(90vw, 640px);
+    border: 4px solid #ffb6d9;
+    box-shadow: 0 0 24px #ff6fae88;
+  }
+</style>
+</head>
+<body>
+<canvas id="c" width="160" height="160"></canvas>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+// --- palette ---
+const P = {
+  ' ': null,
+  'k': '#2b1b12', // hair dark / outline (boy)
+  'K': '#5a3a20', // hair brown (boy)
+  'y': '#f7d774', // hair blonde (girl)
+  'Y': '#e0b84a', // hair blonde shade (girl)
+  's': '#f4c9a3', // skin
+  'S': '#e0ac82', // skin shade
+  'p': '#ff6fae', // pink dress
+  'P': '#d94f8c', // pink dress shade
+  'b': '#4f7fff', // blue shirt
+  'B': '#3757c9', // blue shirt shade
+  'e': '#1a1030', // eye outline (unused directly, kept for compat)
+  'c': '#3fa9ff', // eye blue (girl)
+  'g': '#3fd67c', // eye green (boy)
+  'h': '#ff2d6f', // heart
+  'H': '#ff8fb3', // heart light
+  'w': '#ffffff', // white / highlight
+};
+
+// 16x20 grid character sprites, two frames for walk (legs offset)
+function sprite(rows) { return rows.map(r => r.split('')); }
+
+// girl walking frame A / B
+const girlA = sprite([
+"     yyyy       ",
+"    yyyyyY      ",
+"   yyyyyyyY     ",
+"   ysssssy      ",
+"   ssscsss      ",
+"   sssssss      ",
+"    sSSSSs      ",
+"   ppppppp      ",
+"  pppppppppp    ",
+" pppppppppppp   ",
+" pPPPPPPPPPPp   ",
+" pppppppppppp   ",
+"  pp      pp    ",
+"  pp      pp    ",
+"  ss       s    ",
+"  ss        s   ",
+"                ",
+]);
+const girlB = sprite([
+"     yyyy       ",
+"    yyyyyY      ",
+"   yyyyyyyY     ",
+"   ysssssy      ",
+"   ssscsss      ",
+"   sssssss      ",
+"    sSSSSs      ",
+"   ppppppp      ",
+"  pppppppppp    ",
+" pppppppppppp   ",
+" pPPPPPPPPPPp   ",
+" pppppppppppp   ",
+"  pp      pp    ",
+"   s      pp    ",
+"   s        s   ",
+"              s ",
+"                ",
+]);
+
+const boyA = sprite([
+"     kkkk       ",
+"    kkkkkk      ",
+"   kkkkkkkk     ",
+"   ksssssk      ",
+"   sssgsss      ",
+"   sssssss      ",
+"    sSSSSs      ",
+"   bbbbbbb      ",
+"  bbbbbbbbbb    ",
+" bbbbbbbbbbbb   ",
+" bBBBBBBBBBBb   ",
+" bbbbbbbbbbbb   ",
+"  bb      bb    ",
+"  bb      bb    ",
+"  ss       s    ",
+"  ss        s   ",
+"                ",
+]);
+const boyB = sprite([
+"     kkkk       ",
+"    kkkkkk      ",
+"   kkkkkkkk     ",
+"   ksssssk      ",
+"   sssgsss      ",
+"   sssssss      ",
+"    sSSSSs      ",
+"   bbbbbbb      ",
+"  bbbbbbbbbb    ",
+" bbbbbbbbbbbb   ",
+" bBBBBBBBBBBb   ",
+" bbbbbbbbbbbb   ",
+"  bb      bb    ",
+"   s      bb    ",
+"   s        s   ",
+"              s ",
+"                ",
+]);
+
+// facing kiss frames: heads tilted together, eyes closed (no 'e'), small blush
+const girlKiss = sprite([
+"       yyyy     ",
+"      yyyyyY    ",
+"     yyyyyyyY   ",
+"     yssssy     ",
+"     sssssss    ",
+"     sssssss    ",
+"      sSSSs     ",
+"     ppppppp    ",
+"    pppppppppp  ",
+"   pppppppppppp ",
+"   pPPPPPPPPPPp ",
+"   pppppppppppp ",
+"    pp      pp  ",
+"    pp      pp  ",
+"    ss       s  ",
+"    ss        s ",
+"                ",
+]);
+const boyKiss = sprite([
+"   kkkk         ",
+"  kkkkkk        ",
+" kkkkkkkk       ",
+" ksssssk        ",
+" sssssss        ",
+" sssssss        ",
+"  sSSSs         ",
+" bbbbbbb        ",
+"bbbbbbbbbb      ",
+"bbbbbbbbbbbb    ",
+"bBBBBBBBBBBb    ",
+"bbbbbbbbbbbb    ",
+" bb      bb     ",
+" bb      bb     ",
+" ss       s     ",
+" ss        s    ",
+"                ",
+]);
+
+const SCALE = 4; // 16*4=64 sprite box, canvas 160
+
+function drawSprite(grid, ox, oy, flip) {
+  const w = grid[0].length;
+  for (let y = 0; y < grid.length; y++) {
+    for (let x = 0; x < w; x++) {
+      const ch = grid[y][x];
+      const col = P[ch];
+      if (!col) continue;
+      const px = flip ? (w - 1 - x) : x;
+      ctx.fillStyle = col;
+      ctx.fillRect(ox + px * SCALE, oy + y * SCALE, SCALE, SCALE);
+    }
+  }
+}
+
+function drawHeart(cx, cy, s, alpha) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = '#ff2d6f';
+  const px = SCALE * 0.5 * s;
+  const shape = [
+    "  h h  ",
+    " hhhhh ",
+    " hhhhh ",
+    "  hhh  ",
+    "   h   ",
+  ];
+  for (let y = 0; y < shape.length; y++) {
+    for (let x = 0; x < shape[y].length; x++) {
+      if (shape[y][x] === 'h') {
+        ctx.fillRect(cx + x * px, cy + y * px, px, px);
+      }
+    }
+  }
+  ctx.restore();
+}
+
+function drawBackground(t) {
+  // night sky gradient
+  const g = ctx.createLinearGradient(0, 0, 0, 160);
+  g.addColorStop(0, '#2a1a4a');
+  g.addColorStop(1, '#1a1030');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 160, 160);
+
+  // twinkling stars
+  ctx.fillStyle = '#fff';
+  const stars = [[10,10],[30,20],[60,8],[90,15],[120,25],[140,10],[20,40],[150,40],[5,60],[145,70]];
+  stars.forEach(([sx, sy], i) => {
+    const tw = 0.4 + 0.6 * Math.abs(Math.sin(t / 400 + i));
+    ctx.globalAlpha = tw;
+    ctx.fillRect(sx, sy, 2, 2);
+  });
+  ctx.globalAlpha = 1;
+
+  // moon
+  ctx.fillStyle = '#fff6d9';
+  ctx.fillRect(130, 12, 12, 12);
+
+  // ground
+  ctx.fillStyle = '#3a2a5a';
+  ctx.fillRect(0, 140, 160, 20);
+  ctx.fillStyle = '#4a3a6a';
+  ctx.fillRect(0, 140, 160, 3);
+}
+
+const GIRL_START = -30;
+const BOY_START = 190;
+const GIRL_END = 66;  // left edge of girl sprite box when meeting
+const BOY_END = 82;   // left edge of boy sprite box when meeting
+const WALK_MS = 3200;
+const KISS_MS = 2200;
+const PAUSE_MS = 900;
+const CYCLE_MS = WALK_MS + KISS_MS + PAUSE_MS;
+
+function ease(t) { return t < 0.5 ? 2*t*t : -1 + (4 - 2*t) * t; }
+
+function frame(t) {
+  const local = t % CYCLE_MS;
+  drawBackground(t);
+
+  if (local < WALK_MS) {
+    const p = ease(local / WALK_MS);
+    const gx = GIRL_START + (GIRL_END - GIRL_START) * p;
+    const bx = BOY_START + (BOY_END - BOY_START) * p;
+    const walkFrame = Math.floor(local / 180) % 2 === 0;
+    drawSprite(walkFrame ? girlA : girlB, gx, 60);
+    drawSprite(walkFrame ? boyA : boyB, bx, 60, true);
+  } else if (local < WALK_MS + KISS_MS) {
+    const kt = local - WALK_MS;
+    drawSprite(girlKiss, GIRL_END, 60);
+    drawSprite(boyKiss, BOY_END, 60, true);
+    // floating hearts
+    for (let i = 0; i < 3; i++) {
+      const phase = (kt - i * 500) / 1400;
+      if (phase > 0 && phase < 1) {
+        const hy = 70 - phase * 40;
+        const hx = 100 + Math.sin(phase * 6 + i) * 6;
+        const alpha = phase < 0.15 ? phase / 0.15 : (1 - (phase - 0.15) / 0.85);
+        drawHeart(hx, hy, 1, Math.max(0, Math.min(1, alpha)));
+      }
+    }
+  } else {
+    drawSprite(girlKiss, GIRL_END, 60);
+    drawSprite(boyKiss, BOY_END, 60, true);
+  }
+
+  requestAnimationFrame(() => frame(performance.now() - t0));
+}
+
+const t0 = performance.now();
+requestAnimationFrame(() => frame(0));
+</script>
+</body>
+</html>
